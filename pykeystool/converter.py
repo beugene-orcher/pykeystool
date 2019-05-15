@@ -31,7 +31,8 @@ class KeyConverter():
         if self.ek is None:
             self.output.set_error("Encrypted Key mustn't be None")
         if self.ek is not None and not len(self.ek) in (32, 48):
-            self.output.set_error("Encrypted Key must be 24 bytes or 48 chars")
+            self.output.set_error("Encrypted Key must be 24 bytes (48 chars) "
+                                  "or 16 bytes (32 chars)")
         if self.mode not in ('0', '1'):
             self.output.set_error("Mode must be 0 - ECB or 1 - CBC")
         if self.iv is None and self.mode == '1':

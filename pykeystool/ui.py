@@ -1,6 +1,5 @@
 import curses
 import sys
-from curses import panel
 from curses import textpad
 from pykeystool.converter import KeyConverter
 from pykeystool.menu_description import menu_dict
@@ -8,20 +7,14 @@ from pykeystool.menu_description import menu_dict
 
 class Form():
 
-    def __init__(self, stdscr):
-        self.max_y, self.max_x = stdscr.getmaxyx()
-        self.set_h_w()
+    def __init__(self, stdscr, win):
+        self.stdscr = stdscr
+        self.count_y_x(win)
         self.window = stdscr.subwin(self.lines, self.cols, self.y, self.x)
         self.window.clear()
         self.set_window_border_and_title()
         self.window.keypad(1)
-        self.panel = panel.new_panel(self.window)
-        self.panel.hide()
-        panel.update_panels()
-
-    def set_h_w(self):
-        self.lines = int(self.coef_lines * self.max_y)
-        self.cols = int(self.coef_cols * self.max_x)
+        self.window.refresh()
 
     def set_window_border_and_title(self):
         self.window.attron(curses.color_pair(1))
@@ -38,15 +31,28 @@ class Form():
         tp = textpad.Textbox(sub_text, insert_mode=True)
         return tp
 
+    def count_y_x(self, win):
+        max_y, max_x = self.stdscr.getmaxyx()
+        max_y, max_x = int(0.9 * max_y), int(0.9 * max_x)
+        y0, x0 = 1, 1
+        y1, x1 = int(0.6 * max_y), int(0.2 * max_x)
+        if win == 'menu':
+            self.y, self.x = y0, x0
+            self.lines, self.cols = max_y, x1
+        if win == 'message':
+            self.y, self.x = y0, x1
+            self.lines, self.cols = y1-1, max_x - x1
+        if win == 'input':
+            self.y, self.x = y1, x1
+            self.lines, self.cols = max_y - y1 + 1, max_x - x1
+
 
 class MenuForm(Form):
     menu_dict = menu_dict
-    coef_lines, coef_cols = 0.9, 0.2
-    y, x = 2, 2
     title = ' Menu '
 
     def __init__(self, stdscr):
-        super().__init__(stdscr)
+        super().__init__(stdscr, 'menu')
         self.position = 0
 
     def navigate(self, n):
@@ -57,8 +63,6 @@ class MenuForm(Form):
             self.position = len(self.menu_dict) - 1
 
     def display(self):
-        self.panel.show()
-
         while True:
             self.window.refresh()
             curses.doupdate()
@@ -87,12 +91,10 @@ class MenuForm(Form):
 
 
 class MessageForm(Form):
-    coef_lines, coef_cols = 0.6, 0.7
-    y, x = 2, 38
     title = ' Messages '
 
     def __init__(self, stdscr):
-        super().__init__(stdscr)
+        super().__init__(stdscr, 'message')
         self.window.keypad(0)
 
     def display(self, text, mode):
@@ -124,31 +126,25 @@ class MessageForm(Form):
 
 
 class InputForm(Form):
-    coef_lines, coef_cols = 0.3, 0.7
-    y, x = 31, 38
     title = ' Input '
 
     def __init__(self, stdscr):
-        super().__init__(stdscr)
+        super().__init__(stdscr, 'input')
 
     def display(self, mode):
         self.window.clear()
         self.set_window_border_and_title()
 
         if mode == 0:
-            # Decrypt key level
+            # Decrypt key submenu
             self.window.addstr(2, 4, 'Master key: ')
-            widget = self.get_pretty_textbox(3, 35, 32, 65)
-
+            widget = self.get_pretty_textbox(3, 35, 28, 65)
             self.window.addstr(5, 4, 'Encrypted key: ')
-            widget2 = self.get_pretty_textbox(3, 51, 35, 65)
-
+            widget2 = self.get_pretty_textbox(3, 51, 31, 65)
             self.window.addstr(8, 4, 'ECB/CBC (0/1): ')
-            widget3 = self.get_pretty_textbox(3, 4, 38, 65)
-
+            widget3 = self.get_pretty_textbox(3, 4, 34, 65)
             self.window.addstr(11, 4, 'IV: ')
-            widget4 = self.get_pretty_textbox(3, 19, 41, 65)
-
+            widget4 = self.get_pretty_textbox(3, 19, 37, 65)
             self.window.refresh()
             self.mk = widget.edit().strip()
             self.ek = widget2.edit().strip()
@@ -168,17 +164,25 @@ class InputForm(Form):
 class MyApp():
 
     def __init__(self, stdscr):
-        self.screen = stdscr
-        self.set_cursor()
-        self.set_styles()
-        menu_form = MenuForm(self.screen)
-        mess_form = MessageForm(self.screen)
-        input_form = InputForm(self.screen)
-        while True:
-            result = menu_form.display()
-            mess_form.display(result[0], 0)
-            input_form.display(result[1])
-            mess_form.display(input_form.get_values(), 1)
+        try:
+            self.screen = stdscr
+            self.set_cursor()
+            self.set_styles()
+            menu_form = MenuForm(self.screen)
+            mess_form = MessageForm(self.screen)
+            input_form = InputForm(self.screen)
+            while True:
+                result = menu_form.display()
+                mess_form.display(result[0], 0)
+                input_form.display(result[1])
+                mess_form.display(input_form.get_values(), 1)
+        except Exception as e:
+            if 'ERR' in repr(e):
+                raise Exception('Terminal window is too small, '
+                                'please resize the '
+                                'terminal window and run the app again')
+            else:
+                raise e
 
     def set_styles(self):
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
@@ -189,4 +193,4 @@ class MyApp():
         try:
             self.screen.leaveok(True)
         except Exception:
-            raise Exception("Your terminal doesn't support a cursor")
+            raise Exception("Terminal doesn't support a cursor")
